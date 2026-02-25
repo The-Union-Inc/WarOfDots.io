@@ -2,52 +2,54 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Dot Conquest IO</title>
+<title>Dot Warfare</title>
 <style>
-    html,body{
-        margin:0;
-        padding:0;
-        overflow:hidden;
-        background:#111;
-        font-family:sans-serif;
-    }
-    canvas{
-        display:block;
-    }
-    #ui{
-        position:absolute;
-        top:10px;
-        left:10px;
-        color:white;
-        z-index:10;
-    }
+html,body{
+    margin:0;
+    padding:0;
+    overflow:hidden;
+    background:#2e5f2e; /* green battlefield */
+    font-family:sans-serif;
+}
+canvas{ display:block; }
+#ui{
+    position:absolute;
+    bottom:10px;
+    left:10px;
+    color:white;
+    font-size:16px;
+}
 </style>
 </head>
 <body>
-<div id="ui">Drag to select units • Tap to move • Capture bases</div>
+<div id="ui">
+Player Casualties: <span id="pcas">0</span><br>
+Enemy Casualties: <span id="ecas">0</span>
+</div>
 <canvas id="game"></canvas>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const pcasEl=document.getElementById("pcas");
+const ecasEl=document.getElementById("ecas");
 
 function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width=window.innerWidth;
+    canvas.height=window.innerHeight;
 }
 resize();
-window.addEventListener("resize", resize);
+window.addEventListener("resize",resize);
 
 class Unit{
     constructor(x,y,team){
         this.x=x;
         this.y=y;
         this.team=team;
-        this.radius=6;
-        this.speed=1.2;
+        this.radius=14; // bigger dots
+        this.speed=1;
         this.target=null;
-        this.selected=false;
-        this.hp=100;
+        this.hp=10000; // 10k soldiers
     }
     update(){
         if(this.target){
@@ -65,48 +67,12 @@ class Unit{
         ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
         ctx.fillStyle=this.team==="player"?"#4da6ff":"#ff4d4d";
         ctx.fill();
-        if(this.selected){
-            ctx.strokeStyle="#fff";
-            ctx.stroke();
-        }
-    }
-}
 
-class Base{
-    constructor(x,y){
-        this.x=x;
-        this.y=y;
-        this.radius=30;
-        this.owner=null;
-        this.capture=0;
-    }
-    update(){
-        let playerCount=units.filter(u=>u.team==="player" && dist(u,this)<this.radius).length;
-        let enemyCount=units.filter(u=>u.team==="enemy" && dist(u,this)<this.radius).length;
-
-        if(playerCount>enemyCount){
-            this.capture+=0.01;
-            if(this.capture>=1){
-                this.owner="player";
-            }
-        }else if(enemyCount>playerCount){
-            this.capture-=0.01;
-            if(this.capture<=-1){
-                this.owner="enemy";
-            }
-        }
-    }
-    draw(){
-        ctx.beginPath();
-        ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
-        ctx.fillStyle=this.owner==="player"?"#0044aa":
-                     this.owner==="enemy"?"#aa0000":"#444";
-        ctx.fill();
-
+        // soldier count text
         ctx.fillStyle="white";
-        ctx.fillRect(this.x-20,this.y-40,40,5);
-        ctx.fillStyle="#4da6ff";
-        ctx.fillRect(this.x-20,this.y-40,40*(this.capture+1)/2,5);
+        ctx.font="10px sans-serif";
+        ctx.textAlign="center";
+        ctx.fillText(Math.floor(this.hp/1000)+"k",this.x,this.y+3);
     }
 }
 
@@ -115,101 +81,136 @@ function dist(a,b){
 }
 
 let units=[];
-let bases=[];
+let playerCas=0;
+let enemyCas=0;
 
-for(let i=0;i<15;i++){
-    units.push(new Unit(100+Math.random()*100,200+Math.random()*200,"player"));
-    units.push(new Unit(canvas.width-100+Math.random()*50,200+Math.random()*200,"enemy"));
+for(let i=0;i<10;i++){
+    units.push(new Unit(150+Math.random()*200,200+Math.random()*200,"player"));
+    units.push(new Unit(canvas.width-200+Math.random()*150,200+Math.random()*200,"enemy"));
 }
 
-bases.push(new Base(canvas.width/2,canvas.height/2));
-bases.push(new Base(canvas.width/2,canvas.height/4));
-bases.push(new Base(canvas.width/2,canvas.height*0.75));
+let dragging=false;
+let dragStart=null;
+let selectedUnits=[];
 
-let selecting=false;
-let selectStart={x:0,y:0};
+canvas.addEventListener("mousedown",startDrag);
+canvas.addEventListener("touchstart",e=>startDrag(e.touches[0]));
 
-canvas.addEventListener("mousedown",startSelect);
-canvas.addEventListener("touchstart",e=>startSelect(e.touches[0]));
-
-canvas.addEventListener("mousemove",moveSelect);
+canvas.addEventListener("mousemove",moveDrag);
 canvas.addEventListener("touchmove",e=>{
-    moveSelect(e.touches[0]);
+    moveDrag(e.touches[0]);
     e.preventDefault();
 },{passive:false});
 
-canvas.addEventListener("mouseup",endSelect);
-canvas.addEventListener("touchend",endSelect);
+canvas.addEventListener("mouseup",endDrag);
+canvas.addEventListener("touchend",endDrag);
 
-function startSelect(e){
-    selecting=true;
-    selectStart.x=e.clientX;
-    selectStart.y=e.clientY;
+function startDrag(e){
+    dragging=true;
+    dragStart={x:e.clientX,y:e.clientY};
+
+    selectedUnits=[];
+    for(let u of units){
+        if(u.team==="player" && dist(u,{x:e.clientX,y:e.clientY})<u.radius){
+            selectedUnits.push(u);
+        }
+    }
 }
 
-function moveSelect(e){
-    if(!selecting)return;
+function moveDrag(e){
+    if(!dragging)return;
 }
 
-function endSelect(e){
-    if(!selecting)return;
-    selecting=false;
+function endDrag(e){
+    if(!dragging)return;
+    dragging=false;
 
     let endX=e.changedTouches?e.changedTouches[0].clientX:e.clientX;
     let endY=e.changedTouches?e.changedTouches[0].clientY:e.clientY;
 
-    let dx=Math.abs(endX-selectStart.x);
-    let dy=Math.abs(endY-selectStart.y);
-
-    if(dx<5 && dy<5){
-        units.filter(u=>u.selected).forEach(u=>{
-            u.target={x:endX,y:endY};
-        });
-    }else{
-        units.forEach(u=>{
-            u.selected=
-                u.team==="player" &&
-                u.x>Math.min(selectStart.x,endX) &&
-                u.x<Math.max(selectStart.x,endX) &&
-                u.y>Math.min(selectStart.y,endY) &&
-                u.y<Math.max(selectStart.y,endY);
-        });
+    for(let u of selectedUnits){
+        u.target={x:endX,y:endY};
     }
 }
 
+function drawArrow(fromX,fromY,toX,toY){
+    ctx.strokeStyle="yellow";
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(fromX,fromY);
+    ctx.lineTo(toX,toY);
+    ctx.stroke();
+
+    // arrow head
+    let angle=Math.atan2(toY-fromY,toX-fromX);
+    ctx.beginPath();
+    ctx.moveTo(toX,toY);
+    ctx.lineTo(toX-10*Math.cos(angle-0.3),toY-10*Math.sin(angle-0.3));
+    ctx.lineTo(toX-10*Math.cos(angle+0.3),toY-10*Math.sin(angle+0.3));
+    ctx.closePath();
+    ctx.fillStyle="yellow";
+    ctx.fill();
+}
+
 function enemyAI(){
-    units.filter(u=>u.team==="enemy").forEach(u=>{
-        if(!u.target || Math.random()<0.01){
-            let targetBase=bases[Math.floor(Math.random()*bases.length)];
-            u.target={x:targetBase.x,y:targetBase.y};
+    for(let u of units){
+        if(u.team==="enemy"){
+            if(!u.target || Math.random()<0.01){
+                let playerUnits=units.filter(x=>x.team==="player");
+                if(playerUnits.length>0){
+                    let target=playerUnits[Math.floor(Math.random()*playerUnits.length)];
+                    u.target={x:target.x,y:target.y};
+                }
+            }
         }
-    });
+    }
 }
 
 function combat(){
     for(let a of units){
         for(let b of units){
-            if(a!==b && a.team!==b.team && dist(a,b)<8){
-                a.hp-=0.5;
-                b.hp-=0.5;
+            if(a!==b && a.team!==b.team && dist(a,b)<20){
+                let damage=20;
+                a.hp-=damage;
+                b.hp-=damage;
+
+                if(a.hp<=0){
+                    if(a.team==="player") playerCas+=10000;
+                    else enemyCas+=10000;
+                }
+                if(b.hp<=0){
+                    if(b.team==="player") playerCas+=10000;
+                    else enemyCas+=10000;
+                }
             }
         }
     }
     units=units.filter(u=>u.hp>0);
+    pcasEl.textContent=playerCas;
+    ecasEl.textContent=enemyCas;
 }
 
 function gameLoop(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    bases.forEach(b=>{
-        b.update();
-        b.draw();
-    });
+    // subtle grass texture effect
+    for(let i=0;i<canvas.width;i+=40){
+        for(let j=0;j<canvas.height;j+=40){
+            ctx.fillStyle=Math.random()>0.5?"#2e6f2e":"#356f35";
+            ctx.fillRect(i,j,40,40);
+        }
+    }
 
     units.forEach(u=>{
         u.update();
         u.draw();
     });
+
+    if(dragging && selectedUnits.length>0){
+        for(let u of selectedUnits){
+            drawArrow(u.x,u.y,dragStart.x,dragStart.y);
+        }
+    }
 
     enemyAI();
     combat();
